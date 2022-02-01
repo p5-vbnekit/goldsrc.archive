@@ -1,0 +1,105 @@
+name: update agmod.github.patched storages
+
+on:
+  push:
+    branches: agmod.github.upstreams.storage
+    paths:
+      - ".github/workflows/update_patched_storages.yml"
+      - "contents/**"
+  workflow_dispatch: {}
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: preparing system
+        env: { DEBIAN_FRONTEND: noninteractive }
+        run: |
+          sudo apt update --assume-yes
+          sudo apt install --assume-yes apt-utils
+          sudo apt install --assume-yes debconf
+          sudo apt full-upgrade --assume-yes
+          sudo apt install --assume-yes git rsync xz-utils dos2unix
+      - name: cloning main branch
+        uses: actions/checkout@v2.4.0
+        with: { ref: main }
+      - name: cloning upstream storage branch
+        uses: actions/checkout@v2.4.0
+        with:
+          ref: agmod.github.upstreams.storage
+          path: .tmp/upstream
+      - name: cloning patched storage branch
+        uses: actions/checkout@v2.4.0
+        with:
+          ref: linux.agmod.github.patched.storage
+          path: .tmp/patched
+      - name: appying changes
+        working-directory: .tmp/patched
+        run: |
+          rsync --delete --archive '${{github.workspace}}/.tmp/upstream/contents/' contents
+          for _file in $(find '${{github.workspace}}/patches/github/agmod/linux' -type f -name '*.patch.xz' | sort --numeric-sort); do
+            echo "applying patch: `basename ${_file}`" >&2
+            (xzcat "${_file}" | git apply) || exit $?
+          done
+          test -n "`git status --porcelain contents`" || exit 0
+          git add --all contents
+          git config --local user.email "noreply@example.com"
+          git config --local user.name "autoupdate workflow"
+          git commit --message "autoupdate from upstream branch"
+          for _f in `git grep --cached -Il '' -- contents`; do dos2unix "${_f}"; done
+          test -n "`git status --porcelain contents`" || exit 0
+          git add --all contents
+          git commit --amend --no-edit
+      - name: uploading changes
+        uses: ad-m/github-push-action@v0.6.0
+        with:
+          branch: linux.agmod.github.patched.storage
+          directory: .tmp/patched
+          github_token: "${{github.token}}"
+  windows:
+    runs-on: ubuntu-latest
+    steps:
+      - name: preparing system
+        env: { DEBIAN_FRONTEND: noninteractive }
+        run: |
+          sudo apt update --assume-yes
+          sudo apt install --assume-yes apt-utils
+          sudo apt install --assume-yes debconf
+          sudo apt full-upgrade --assume-yes
+          sudo apt install --assume-yes git rsync xz-utils dos2unix
+      - name: cloning main branch
+        uses: actions/checkout@v2.4.0
+        with: { ref: main }
+      - name: cloning upstream storage branch
+        uses: actions/checkout@v2.4.0
+        with:
+          ref: agmod.github.upstreams.storage
+          path: .tmp/upstream
+      - name: cloning patched storage branch
+        uses: actions/checkout@v2.4.0
+        with:
+          ref: windows.agmod.github.patched.storage
+          path: .tmp/patched
+      - name: appying changes
+        working-directory: .tmp/patched
+        run: |
+          rsync --delete --archive '${{github.workspace}}/.tmp/upstream/contents/' contents
+          for _file in $(find '${{github.workspace}}/patches/github/agmod/windows' -type f -name '*.patch.xz' | sort --numeric-sort); do
+            echo "applying patch: `basename ${_file}`" >&2
+            (xzcat "${_file}" | git apply) || exit $?
+          done
+          test -n "`git status --porcelain contents`" || exit 0
+          git add --all contents
+          git config --local user.email "noreply@example.com"
+          git config --local user.name "autoupdate workflow"
+          git commit --message "autoupdate from upstream branch"
+          for _f in `git grep --cached -Il '' -- contents`; do unix2dos "${_f}"; done
+          test -n "`git status --porcelain contents`" || exit 0
+          git add --all contents
+          git commit --amend --no-edit
+      - name: uploading changes
+        uses: ad-m/github-push-action@v0.6.0
+        with:
+          branch: windows.agmod.github.patched.storage
+          directory: .tmp/patched
+          github_token: "${{github.token}}"
