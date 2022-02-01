@@ -1,0 +1,58 @@
+name: update windows.90.steamcmd.patched storage
+
+on:
+  push:
+    branches: windows.90.steamcmd.upstreams.storage
+    paths:
+      - ".github/workflows/update_patched_storage.yml"
+      - "contents/**"
+  workflow_dispatch: {}
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: preparing system
+        env: { DEBIAN_FRONTEND: noninteractive }
+        run: |
+          sudo apt update --assume-yes
+          sudo apt install --assume-yes apt-utils
+          sudo apt install --assume-yes debconf
+          sudo apt full-upgrade --assume-yes
+          sudo apt install --assume-yes git rsync xz-utils dos2unix
+      - name: cloning main branch
+        uses: actions/checkout@v2.4.0
+        with: { ref: main }
+      - name: cloning current upstream version
+        uses: actions/checkout@v2.4.0
+        with:
+          ref: windows.90.steamcmd.upstreams.storage
+          path: .tmp/upstream
+      - name: cloning current patched version
+        uses: actions/checkout@v2.4.0
+        with:
+          ref: windows.90.steamcmd.patched.storage
+          path: .tmp/patched
+      - name: appying changes
+        working-directory: .tmp/patched
+        run: |
+          rsync --delete --archive '${{github.workspace}}/.tmp/upstream/contents/' contents
+          for _file in $(find '${{github.workspace}}/patches/steamcmd/90/windows' -type f -name '*.patch.xz' | sort --numeric-sort); do
+            echo "applying patch: `basename ${_file}`" >&2
+            (xzcat "${_file}" | git apply) || exit $?
+          done
+          test -n "`git status --porcelain contents`" || exit 0
+          git add --all contents
+          git config --local user.email "noreply@example.com"
+          git config --local user.name "autoupdate workflow"
+          git commit --message "autoupdate from upstream branch"
+          for _f in `git grep --cached -Il '' -- contents`; do unix2dos --force "${_f}"; done
+          test -n "`git status --porcelain contents`" || exit 0
+          git add --all contents
+          git commit --amend --no-edit
+      - name: uploading changes
+        uses: ad-m/github-push-action@v0.6.0
+        with:
+          branch: windows.90.steamcmd.patched.storage
+          directory: .tmp/patched
+          github_token: "${{github.token}}"
